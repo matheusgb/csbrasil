@@ -499,6 +499,103 @@ function _pingPresenca() {
     if (!navigator.sendBeacon('/api/presence', blob)) api('/api/presence', JSON.parse(payload));
   } catch { /* presença nunca atrapalha o jogador */ }
 }
+
+/* ============ TELEMETRIA NOVA (feat/telemetria: funil · aquisição · perf · match) ============
+ * Quatro sinais que SAIAM do Vercel Analytics (plano grátis não filtra propriedade de
+ * evento) e passam a morar no NOSSO Postgres, lidos pelo painel admin. Mesma regra das
+ * irmãs: sendBeacon, fail-silent, anônimas por anonId (UUID de localStorage), sem IP.
+ * Ver supabase/migrations/016-019 e /api/{match,funnel,perf,acquisition}. */
+// FUNIL (017): land → menu → match_start → match_end → quit. Converte "chegou a jogar?".
+function _funnel(step) {
+  if (testMode) return;
+  try { navigator.sendBeacon('/api/funnel', new Blob([JSON.stringify({ step })], { type: 'application/json' })); } catch { /* fail-silent */ }
+}
+// AQUISIÇÃO (019): 1x por navegador. referrer vira host (URL inteira pode carregar query
+// sensível); UTM e ?ref= lidos da URL de entrada. first-touch-wins no servidor.
+let _acqSent = false;
+async function _sendAcquisition() {
+  if (testMode || _acqSent) return;
+  try { if (localStorage.getItem('cs_acq')) { _acqSent = true; return; } } catch {}
+  const u = new URLSearchParams(location.search);
+  const payload = {
+    anonId: getAnonId(),
+    referrer: document.referrer || null,
+    utmSource: u.get('utm_source'), utmMedium: u.get('utm_medium'), utmCampaign: u.get('utm_campaign'),
+    ref: u.get('ref'), landing: location.pathname,
+  };
+  try {
+    /* fetch + keepalive, e NÃO sendBeacon: aqui a RESPOSTA importa. sendBeacon
+       não devolve resposta — marcar cs_acq sem saber se o servidor gravou
+       aposentava a 1ª aquisição para sempre num 503/stored:false (P1 da review,
+       PR #92). keepalive mantém a entrega mesmo se a aba fechar no meio. */
+    const resp = await fetch('/api/acquisition', {
+      method: 'POST', keepalive: true,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const dados = await resp.json().catch(() => null);
+    if (!resp.ok || !dados || dados.stored !== true) return; // próxima visita retenta
+    try { localStorage.setItem('cs_acq', '1'); } catch {}
+    _acqSent = true;
+  } catch { /* fail-silent */ }
+}
+// PERF (018): 1x por sessão, depois do boot. boot_ms = performance.now() no fim do módulo;
+// fps = contagem de frames em 1s de rAF; dispositivo = tier aproximado (nada fino pra não
+// virar fingerprint). Renderer GPU sai de um canvas descartável (não do renderer do jogo).
+let _perfSent = false;
+function _sendPerf() {
+  if (testMode || _perfSent) return;
+  _perfSent = true;
+  const bootMs = Math.round(performance.now());
+  let frames = 0; const t0 = performance.now();
+  const tick = () => { frames++; if (performance.now() - t0 < 1000) requestAnimationFrame(tick); else _perfFinish(bootMs, frames); };
+  requestAnimationFrame(tick);
+}
+function _perfFinish(bootMs, frames) {
+  let rendererStr = null;
+  try {
+    const c = document.createElement('canvas');
+    const gl = c.getContext('webgl2') || c.getContext('webgl');
+    const dbg = gl && gl.getExtension('WEBGL_debug_renderer_info');
+    rendererStr = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : null;
+  } catch { /* GPU info é melhor-esforço */ }
+  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  const payload = {
+    anonId: getAnonId(), version: VERSION,
+    fps: frames, bootMs,
+    cores: navigator.hardwareConcurrency || null,
+    memoryGb: navigator.deviceMemory || null,
+    renderer: rendererStr,
+    dpr: window.devicePixelRatio || null,
+    vw: window.innerWidth, vh: window.innerHeight,
+    connection: conn?.effectiveType || null,
+    quality: settings.quality || null,
+  };
+  try { navigator.sendBeacon('/api/perf', new Blob([JSON.stringify(payload)], { type: 'application/json' })); } catch { /* fail-silent */ }
+}
+// MATCH EVENT (016): evento RICO por partida (anônimo), carrega arma/personagem/placar/
+// resultado. Complementa o submit-match (só registrado) e a telemetria agregada (012).
+// _wperf vem do game.js (abates por arma, zerado por partida no construtor).
+let _matchEventSent = false;
+function sendMatchEvent(result) {
+  if (_matchEventSent || testMode || !game) return;
+  _matchEventSent = true;
+  const g = game, p = g.player, wk = g._wperf || {};
+  const top = Object.entries(wk).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  const payload = {
+    anonId: getAnonId(),
+    map: currentMap, mode: matchMode === 'ctf' ? 'ctf' : 'rounds',
+    character: currentChar, team: g.playerTeam,
+    result: result || 'quit',
+    kills: p.kills || 0, deaths: p.deaths || 0, headshots: p.headshots || 0,
+    bestStreak: g.mk?.best || 0,
+    rounds: (g.roundsWon?.E || 0) + (g.roundsWon?.B || 0),
+    seconds: Math.round(g.time || 0),
+    topWeapon: top, weaponKills: wk, botCount: g.bots?.length || 0,
+    nick: registeredNick || null,
+  };
+  try { navigator.sendBeacon('/api/match', new Blob([JSON.stringify(payload)], { type: 'application/json' })); } catch { /* fail-silent */ }
+}
 /* AS CHAMADAS MORAM DEPOIS DO `const testMode` — e isto não é estilo, é o que fazia o jogo
    não abrir (07/08, medido em produção). `_pingPresenca` lê `testMode` na primeira linha;
    `const` não é hoisted como `var`: chamar a função ANTES da linha 498 lança
@@ -527,6 +624,17 @@ const testMode = params.get('debug') === '1';
    só a ordem, que era o defeito. */
 _pingPresenca();
 setInterval(_pingPresenca, 45_000);
+
+/* Telemetria nova (feat/telemetria) — dispara UMA vez na carga, depois de `testMode`
+   existir (mesma lição do BUG-34: estas leem testMode na 1ª linha). */
+_sendAcquisition();   // aquisição 1x por navegador (019)
+_funnel('land');      // funil: chegou (017)
+_sendPerf();          // perf de cliente 1x por sessão (018)
+// funil 'menu': 1ª interação real (teclado ou mouse) — separa "olhou e foi" de "usou".
+let _menuFuneled = false;
+const _menuOnce = () => { if (_menuFuneled) return; _menuFuneled = true; _funnel('menu'); removeEventListener('pointerdown', _menuOnce); removeEventListener('keydown', _menuOnce); };
+addEventListener('pointerdown', _menuOnce);
+addEventListener('keydown', _menuOnce);
 
 async function startGame(team, charId, enemyFaction) {
   if (isMobile && !testMode) { show('mobile-warning'); return; }
@@ -584,6 +692,8 @@ async function startGame(team, charId, enemyFaction) {
   window.__game = game;
   submitted = false;
   telemetrySent = false;   // partida nova = uma linha nova de telemetria
+  _matchEventSent = false;   // partida nova = um evento rico novo (feat/telemetria)
+  _funnel('match_start');    // funil: começou a jogar (017)
   retryPending();
   armSwitchHook();
   game.onOpenSettings = () => { game.setPaused(true); settingsReturn = 'pause-menu'; show('settings-panel'); };
@@ -639,10 +749,14 @@ function quitToMenu() {
      saída DELIBERADA pelo menu; a diferença entre ele e o `game_start` continua sendo a
      soma de "fechou a aba" com "travou". */
   try {
-    if (game) window.va?.('event', { name: 'match_abandon', data: {
-      map: game._mapId, mode: game.ctf ? 'ctf' : 'rounds',
-      character: game.playerCharId, seconds: Math.round(game.time || 0),
-    } });
+    if (game) {
+      window.va?.('event', { name: 'match_abandon', data: {
+        map: game._mapId, mode: game.ctf ? 'ctf' : 'rounds',
+        character: game.playerCharId, seconds: Math.round(game.time || 0),
+      } });
+      sendMatchEvent('quit');   // evento rico: abandonou pelo menu (feat/telemetria, 016)
+      _funnel('quit');           // funil: saiu deliberado (017)
+    }
   } catch {}
   switchMode = false;   // never carry an in-match team-switch into the menu
   // dispose protegido: se a limpeza da partida falhar, o menu volta MESMO assim
@@ -1310,6 +1424,7 @@ function partialPayload() {
 }
 addEventListener('beforeunload', (e) => {
   sendTelemetry();   // aba fechando no meio da partida ainda conta como tempo jogado
+  if (emPartida()) { sendMatchEvent('quit'); _funnel('quit'); }   // feat/telemetria
   const pl = partialPayload();
   if (pl) navigator.sendBeacon('/api/submit-match', new Blob([JSON.stringify(pl)], { type: 'application/json' }));
   /* SEGUNDA CAMADA CONTRA O CTRL+W (relato do Daniel Diniz: *"quando fica muito tempo com
@@ -1353,6 +1468,8 @@ function loadStats() {
 async function recordMatchStats(s) {
   submitted = true;
   sendTelemetry();   // ANTES do guard de nick lá embaixo: telemetria cobre quem não registrou
+  sendMatchEvent(s?.won ? 'won' : 'lost');   // evento rico anônimo (feat/telemetria, 016)
+  _funnel('match_end');                        // funil: terminou (017)
   const st = loadStats();
   st.matches++; if (s.won) st.wins++;
   st.kills += s.kills; st.deaths += s.deaths; st.headshots += s.headshots;

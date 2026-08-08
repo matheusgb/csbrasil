@@ -41,9 +41,9 @@ algo está errado e o quality gate está verde, o defeito é do quality gate.
 
 | Zona | O que é | Tamanho medido | Regra |
 |---|---|---|---|
-| `public/` | o **jogo** | 31 arquivos `.js`, 26.912 linhas · Three.js `r160` vendorizado | ES modules servidos crus, **zero build**, sem dependência de runtime |
-| `src/` | o **site** | 17 páginas `.astro`, 13 rotas `/api` · Astro `^7.1.1` | framework é bem-vindo; `service_role` só no servidor |
-| `tools/` | o **arnês** | 165 scripts em `tools/eval/`, 45 em `tools/` | node puro: sobe o jogo real sem browser |
+| `public/` | o **jogo** | 31 arquivos `.js`, 27.037 linhas · Three.js `r160` vendorizado | ES modules servidos crus, **zero build**, sem dependência de runtime |
+| `src/` | o **site** | 17 páginas `.astro`, 17 rotas `/api` · Astro `^7.1.1` | framework é bem-vindo; `service_role` só no servidor |
+| `tools/` | o **arnês** | 166 scripts em `tools/eval/`, 45 em `tools/` | node puro: sobe o jogo real sem browser |
 
 **Não existe `public/index.html`.** O HTML do jogo é `src/pages/index.astro`, servido na rota `/`. Servir `public/` estaticamente entrega os arnêses visuais, **não o jogo** — é a pegadinha que custa a primeira hora de todo mundo.
 
@@ -137,10 +137,10 @@ Um assunto, um arquivo. Se você precisa da informação, é daqui que você sai
 
 ```bash
 npm run check        # npm run syntax && npm run audio:check && npm run eval:ctfhud && npm run eval:vm && npm run eval:invariants && npm run eval:kick && npm run eval:bots
-npm run check:fast   # node tools/eval/runner.mjs syntax docs:check arch:check audio:check feet:check eval:ctfhud eval:pause eval:ctfround eval:ctfwin eval:spawn eval:regen eval:pegada eval:ctflabels anims:check anims:merge:check walls:check
+npm run check:fast   # node tools/eval/runner.mjs syntax docs:check arch:check audio:check feet:check eval:ctfhud eval:pause eval:ctfround eval:ctfwin eval:spawn eval:regen eval:pegada eval:ctflabels eval:telemetry anims:check anims:merge:check walls:check
 ```
 
-`package.json` tem **55 scripts**. Vários trazem uma chave `//nome` logo acima com o motivo de existirem — é onde mora o porquê.
+`package.json` tem **56 scripts**. Vários trazem uma chave `//nome` logo acima com o motivo de existirem — é onde mora o porquê.
 
 > Bloco gerado por `node tools/gen-docs.mjs`. Fonte: `node -p "Object.keys(require('./package.json').scripts)"`
 

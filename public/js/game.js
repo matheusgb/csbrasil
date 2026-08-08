@@ -683,6 +683,11 @@ export class Game {
       kills: 0, deaths: 0, headshots: 0, grounded: true, stepPhase: 0, revealedAt: -99, protUntil: 0, smokes: 5,
     };
     this.combatants.push(this.player);
+    // TELEMETRIA DE ARMA (feat/telemetria): conta abates por id de arma nesta
+    // partida. Zerado por partida (new Game por startGame), acumula entre rodadas
+    // da mesma partida — mesma granularidade do kills/deaths. Lido pelo main.js
+    // no fim da partida e mandado em /api/match (top_weapon + weapon_kills).
+    this._wperf = {};
     // ANDAR SILENCIOSO (Shift): o disparo do passo mora no _updatePlayer, num trecho que não
     // é desta região de edição — então o gate fica aqui, envolvendo sfx.step UMA vez (o flag
     // no próprio sfx evita empilhar wrappers quando uma nova partida é criada).
@@ -2858,6 +2863,9 @@ export class Game {
     if (attacker) {
       attacker.kills++; this.roundKills[attacker.team]++;
       this.sfx.voice(this._voiceKey(attacker.team));   // killer's side celebrates (meme audio)
+      // TELEMETRIA DE ARMA: quando o JOGADOR mata, conta a arma usada (param `weap`
+      // já vem do _damage/_tryShoot). Bot mata não conta — não há balanço a inferir.
+      if (attacker.isPlayer && weap) this._wperf[weap] = (this._wperf[weap] || 0) + 1;
       if (attacker.isPlayer) {
         this.sfx.killConfirm();
         if (head) { this.sfx.general('headshot'); attacker.headshots++; }
