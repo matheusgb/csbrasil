@@ -17,7 +17,7 @@ export const prerender = false;
 function submitErrorPayload(message: string) {
   if (/token inválido/i.test(message))
     return { error: 'invalid_token', message: 'token do jogador inválido' };
-  if (/aguarde 90s/i.test(message))
+  if (/aguarde antes de submeter outra partida|muitas partidas seguidas/i.test(message))
     return { error: 'submit_cooldown', message: 'aguarde antes de enviar outra partida' };
   if (/limite diário/i.test(message))
     return { error: 'daily_limit_reached', message: 'limite diário de partidas atingido' };
