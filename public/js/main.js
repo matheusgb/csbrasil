@@ -1391,7 +1391,7 @@ async function api(path, body) {
       ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
       : undefined);
     const j = await r.json().catch(() => ({}));
-    return r.ok ? j : { error: j.error || `http_${r.status}` };
+    return r.ok ? j : { error: j.error || `http_${r.status}`, message: j.message };
   } catch { return null; }
 }
 function submitNote(msg) {
@@ -1503,7 +1503,7 @@ async function recordMatchStats(s) {
       character: s.character, mode: matchMode,
     });
     if (!res) submitNote('ranking global indisponível');
-    else if (res.error) submitNote(traduErroSubmit(res.error));
+    else if (res.error) submitNote(res.message || traduErroSubmit(res.error));
   }
   renderPlayerPlate();   // XP/nível do card do menu sobem junto com os stats
 }
