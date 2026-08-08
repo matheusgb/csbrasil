@@ -5,6 +5,7 @@ import { buildSocialUrl } from '../../lib/social';
 import { isAllowedAvatarUrl } from '../../lib/safe-url';
 import { rateLimit } from '../../lib/ratelimit';
 import { isValidNick, NICK_HINT } from '../../lib/nick';
+import { jsonError, logInternalError } from '../../lib/api-error';
 
 export const prerender = false;
 
@@ -43,8 +44,10 @@ export const POST: APIRoute = async ({ request }) => {
     p_nick: nickLimpo, p_token: token,
     p_social: typeof social === 'string' ? social.slice(0, 60) : null,
   });
-  if (error)
-    return new Response(JSON.stringify({ error: error.message }), { status: 409, headers: { 'content-type': 'application/json' } });
+  if (error) {
+    logInternalError('api/register', error, { nick: nick.trim().slice(0, 14) });
+    return jsonError(409, 'register_conflict', 'não foi possível registrar este nick');
+  }
 
   // multi-redes: [{net, handle}] → [{net, url}] + social_link = primeira
   if (Array.isArray(socials) && socials.length) {

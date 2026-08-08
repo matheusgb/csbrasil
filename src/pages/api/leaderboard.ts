@@ -3,6 +3,7 @@ import type { APIRoute } from 'astro';
 import { supabaseAdmin, NOT_CONFIGURED } from '../../lib/supabase';
 import { RANKING_ON } from '../../lib/site';
 import { rateLimit } from '../../lib/ratelimit';
+import { jsonError, logInternalError } from '../../lib/api-error';
 
 export const prerender = false;
 
@@ -23,8 +24,10 @@ export const GET: APIRoute = async ({ request }) => {
   if (!(await rateLimit(supabaseAdmin, 'leaderboard', ip, 30, 60)))
     return new Response(JSON.stringify({ error: 'rate_limited' }), { status: 429, headers: { 'content-type': 'application/json' } });
   const { data, error } = await supabaseAdmin.from('leaderboard').select('*');
-  if (error)
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'content-type': 'application/json' } });
+  if (error) {
+    logInternalError('api/leaderboard', error);
+    return jsonError(500, 'leaderboard_unavailable', 'ranking global indisponível no momento');
+  }
   return new Response(JSON.stringify({ players: data }), {
     headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=30' },
   });
