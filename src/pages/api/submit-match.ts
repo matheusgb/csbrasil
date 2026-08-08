@@ -4,6 +4,7 @@ import type { APIRoute } from 'astro';
 import { supabaseAdmin, NOT_CONFIGURED } from '../../lib/supabase';
 import { geoFrom } from '../../lib/geo';
 import { rateLimit } from '../../lib/ratelimit';
+import { jsonError, logInternalError } from '../../lib/api-error';
 
 export const prerender = false;
 
@@ -12,6 +13,22 @@ export const prerender = false;
 // (ver o cabeçalho de src/lib/ratelimit.ts). Agora conta no Postgres, então é
 // o mesmo limite pra todas as instâncias. O limite por NICK (1/90 s) e o teto
 // diário continuam dentro do RPC submit_match, onde sempre foram duráveis.
+
+function submitErrorPayload(message: string) {
+  if (/token inválido/i.test(message))
+    return { error: 'invalid_token', message: 'token do jogador inválido' };
+  if (/aguarde 90s/i.test(message))
+    return { error: 'submit_cooldown', message: 'aguarde antes de enviar outra partida' };
+  if (/limite diário/i.test(message))
+    return { error: 'daily_limit_reached', message: 'limite diário de partidas atingido' };
+  if (/stats implaus/i.test(message))
+    return { error: 'implausible_stats', message: 'stats rejeitadas pela validação automática' };
+  if (/fisicamente possível/i.test(message))
+    return { error: 'impossible_kills', message: 'kills além do permitido pela validação automática' };
+  if (/partida rápida demais/i.test(message))
+    return { error: 'match_too_fast', message: 'partida terminou rápido demais para validação automática' };
+  return { error: 'submit_rejected', message: 'não foi possível validar esta partida' };
+}
 
 export const POST: APIRoute = async ({ request, clientAddress }) => {
   if (!supabaseAdmin)
@@ -51,8 +68,11 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
     error = r.error;
     if (!/could not find the function|schema cache/i.test(r.error.message)) break; // erro real (token, rate limit…)
   }
-  if (error)
-    return new Response(JSON.stringify({ error: error.message }), { status: 403, headers: { 'content-type': 'application/json' } });
+  if (error) {
+    logInternalError('api/submit-match', error, { nick: n });
+    const safe = submitErrorPayload(error.message || '');
+    return jsonError(403, safe.error, safe.message);
+  }
 
   // geo: presença + histórico agregado por cidade (nunca IP bruto)
   const g = geoFrom(request);
