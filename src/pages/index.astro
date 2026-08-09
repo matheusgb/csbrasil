@@ -20,6 +20,7 @@
 import pkg from '../../package.json';
 
 const V = pkg.version;
+const BUILD_ID = import.meta.env.VERCEL_GIT_COMMIT_SHA || V;
 const MODULOS = [
   "main.js",
   "game.js",
@@ -911,6 +912,6 @@ const IMPORTMAP = JSON.stringify({
   }
 </script>
 
-<script type="module" src={`/js/main.js?v=${V}`} is:inline></script>
+<script type="module" src={`/js/main.js?v=${BUILD_ID}`} is:inline></script>
 </body>
 </html>
