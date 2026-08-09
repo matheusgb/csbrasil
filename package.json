@@ -25,6 +25,7 @@
     "prod:coherence": "node tools/eval/prod-coherence.mjs",
     "//eval:release": "Todo caminho de GitHub Release usa o nome CSBR e as notas nativas do GitHub, que ligam PRs e contribuidores às contas. Nasceu do alpha.47 (BUG-40): o fallback `git log --oneline` mostrou o commit do #119 sem creditar @EmersonGarrido, e o título ainda dizia CORO SOLTO. `--mutante=nome-antigo|semcreditos` prova as duas cláusulas.",
     "eval:release": "node tools/eval/release-check.mjs",
+    "eval:uuid": "node tools/eval/uuid-compat-check.mjs",
     "//eval:pegada": "Colisor de prop na ALTURA DO CORPO (Brasília): recomputa a pegada dos GLBs (tent/stall/drinkstand/bus) e acusa deriva da tabela PEGADA_CORPO / PEGADA_BUS. Nasceu da reprovação de 05/08 ('box do ônibus e barracas') com o obb-check VERDE — ele compara contra a caixa declarada e não vê caixa mais gorda que a malha.",
     "eval:pegada": "node tools/eval/pegada-check.mjs",
     "//eval:ctflabels": "Bandeira com nome do PRÓPRIO mapa, declarada pelo mapa (defeito de 06/08: 'CONGRESSO' jogando na piscina — o fallback do game.js vazava os nomes de Brasília). --mutante=vaza prova que morde.",

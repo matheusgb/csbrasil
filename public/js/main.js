@@ -436,9 +436,20 @@ let submitted = true;   // stats da partida atual já enviados?
    sendBeacon porque isto costuma sair junto com o fim da partida ou com a aba
    fechando — `fetch` normal é cancelado no unload, sendBeacon não. */
 const ANON_KEY = 'cs_anon';
+function clientUuid() {
+  const c = globalThis.crypto;
+  if (typeof c?.randomUUID === 'function') return c.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (typeof c?.getRandomValues === 'function') c.getRandomValues(bytes);
+  else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map(value => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 function getAnonId() {
   let a = localStorage.getItem(ANON_KEY);
-  if (!a) { a = crypto.randomUUID(); localStorage.setItem(ANON_KEY, a); }
+  if (!a) { a = clientUuid(); localStorage.setItem(ANON_KEY, a); }
   return a;
 }
 let telemetrySent = true;
@@ -1382,7 +1393,7 @@ renderSocials();
 const TOKEN_KEY = 'awpbr_token';
 function getToken() {
   let t = localStorage.getItem(TOKEN_KEY);
-  if (!t) { t = crypto.randomUUID(); localStorage.setItem(TOKEN_KEY, t); }
+  if (!t) { t = clientUuid(); localStorage.setItem(TOKEN_KEY, t); }
   return t;
 }
 async function api(path, body) {

@@ -26,6 +26,8 @@ jobs:
         run: bash -n scripts/*.sh
       - name: Syntax check do jogo (public/js)
         run: npm run syntax
+      - name: UUID compatível com navegadores antigos
+        run: npm run eval:uuid
 
       # O ARCH.md (índice por linha + tabela de conflito) é GERADO. Escrito à
       # mão ele desatualiza no primeiro commit, e uma tabela de conflito com
