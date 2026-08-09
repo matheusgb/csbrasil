@@ -1459,9 +1459,14 @@ addEventListener('beforeunload', (e) => {
 
 /* ---------------- fila de reenvio (rate limit do servidor) ---------------- */
 const PENDING_KEY = 'awpbr_pending_submit';
+function isSubmitCooldown(res) {
+  const error = typeof res?.error === 'string' ? res.error : '';
+  const message = typeof res?.message === 'string' ? res.message : '';
+  return error === 'submit_cooldown' || /aguarde/i.test(error) || /aguarde/i.test(message);
+}
 async function submitGlobal(pl) {
   const res = await api('/api/submit-match', pl);
-  if (res?.error === 'submit_cooldown') {
+  if (isSubmitCooldown(res)) {
     localStorage.setItem(PENDING_KEY, JSON.stringify(pl));
     setTimeout(retryPending, 95_000);   // reenvia sozinho quando a janela abrir
   }
@@ -1472,7 +1477,7 @@ async function retryPending() {
   if (!raw) return;
   const res = await api('/api/submit-match', JSON.parse(raw));
   if (res && !res.error) localStorage.removeItem(PENDING_KEY);
-  else if (res?.error === 'submit_cooldown') setTimeout(retryPending, 95_000);
+  else if (isSubmitCooldown(res)) setTimeout(retryPending, 95_000);
 }
 
 /* ---------------- local stats (espelhados pro ranking global) ----------------
